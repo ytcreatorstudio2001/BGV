@@ -44,7 +44,7 @@ async def convert(file: UploadFile, format: str = Form(...)):
         if source_col in df.columns:
             df_out[output_col] = df[source_col]
         else:
-            df_out[output_col] = ""  # blank if source column missing
+            df_out[output_col] = ""  # blank if missing column
 
     out_file = f"{format}_output.xlsx"
     df_out.to_excel(out_file, index=False)
