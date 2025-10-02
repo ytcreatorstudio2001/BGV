@@ -5,13 +5,13 @@ import os
 
 app = FastAPI()
 
-# Load mapping file
-MAPPING_FILE = "mappings.xlsx"
-mappings_df = pd.read_excel(MAPPING_FILE)
+# Folder containing mapping files
+MAPPING_FOLDER = "mappings"
+mapping_files = os.listdir(MAPPING_FOLDER)
+formats = [f.split(".")[0] for f in mapping_files]  # ['BGV', 'NJ', 'Swayam']
 
 @app.get("/")
 def upload_form():
-    formats = mappings_df["Format"].unique()
     options = "".join([f'<option value="{f}">{f}</option>' for f in formats])
     return HTMLResponse(f"""
     <html>
@@ -29,18 +29,22 @@ def upload_form():
 
 @app.post("/convert")
 async def convert(file: UploadFile, format: str = Form(...)):
+    # Load selected mapping file
+    mapping_path = os.path.join(MAPPING_FOLDER, f"{format}.xlsx")
+    mapping_df = pd.read_excel(mapping_path)
+
+    # Load uploaded bulk data
     df = pd.read_excel(file.file)
 
-    # Filter mappings for selected format
-    mapping = mappings_df[mappings_df["Format"] == format]
-
+    # Create output dataframe
     df_out = pd.DataFrame()
-    for _, row in mapping.iterrows():
-        src, dest = row["Source Column"], row["Target Column"]
-        if src in df.columns:
-            df_out[dest] = df[src]
+    for _, row in mapping_df.iterrows():
+        output_col = row["Output Header"]
+        source_col = row["Source Header"]
+        if source_col in df.columns:
+            df_out[output_col] = df[source_col]
         else:
-            df_out[dest] = ""  # blank if missing column
+            df_out[output_col] = ""  # blank if source column missing
 
     out_file = f"{format}_output.xlsx"
     df_out.to_excel(out_file, index=False)
