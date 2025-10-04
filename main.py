@@ -6,7 +6,7 @@ import os
 app = FastAPI()
 
 # Folder containing mapping files
-MAPPING_FOLDER = "mappings"
+MAPPING_FOLDER = "Mappings"
 mapping_files = os.listdir(MAPPING_FOLDER)
 formats = [f.split(".")[0] for f in mapping_files]  # ['BGV', 'NJ', 'Swayam']
 
