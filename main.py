@@ -7,20 +7,42 @@ app = FastAPI()
 
 # Folder containing mapping files
 MAPPING_FOLDER = "Mappings"
+os.makedirs(MAPPING_FOLDER, exist_ok=True)  # Ensure folder exists
+
+# Read available mapping formats
 mapping_files = os.listdir(MAPPING_FOLDER)
-formats = [f.split(".")[0] for f in mapping_files]  # ['BGV', 'NJ', 'Swayam']
+formats = [f.split(".")[0] for f in mapping_files] if mapping_files else []
 
 @app.get("/")
 def upload_form():
     options = "".join([f'<option value="{f}">{f}</option>' for f in formats])
     return HTMLResponse(f"""
     <html>
+        <head>
+            <title>Candidate Excel Converter</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                h2 {{ color: #333; }}
+                form {{ background: #f9f9f9; padding: 20px; border-radius: 10px; width: 400px; }}
+                input, select {{ margin: 10px 0; padding: 8px; width: 100%; }}
+                input[type=submit] {{
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    cursor: pointer;
+                    border-radius: 5px;
+                }}
+                input[type=submit]:hover {{
+                    background-color: #45a049;
+                }}
+            </style>
+        </head>
         <body>
             <h2>Candidate Excel Converter</h2>
             <form action="/convert" enctype="multipart/form-data" method="post">
-                <input type="file" name="file" required><br><br>
+                <input type="file" name="file" required><br>
                 <label>Select Output Format:</label>
-                <select name="format">{options}</select><br><br>
+                <select name="format" required>{options}</select><br>
                 <input type="submit" value="Generate">
             </form>
         </body>
@@ -29,23 +51,34 @@ def upload_form():
 
 @app.post("/convert")
 async def convert(file: UploadFile, format: str = Form(...)):
-    # Load selected mapping file
     mapping_path = os.path.join(MAPPING_FOLDER, f"{format}.xlsx")
-    mapping_df = pd.read_excel(mapping_path)
 
-    # Load uploaded bulk data
+    # Validate mapping file existence
+    if not os.path.exists(mapping_path):
+        return HTMLResponse(f"<h3>Mapping file for '{format}' not found in {MAPPING_FOLDER}/</h3>", status_code=400)
+
+    # Load mapping and uploaded file
+    mapping_df = pd.read_excel(mapping_path)
     df = pd.read_excel(file.file)
 
-    # Create output dataframe
+    # Create output DataFrame based on mapping
     df_out = pd.DataFrame()
     for _, row in mapping_df.iterrows():
-        output_col = row["Output Header"]
-        source_col = row["Source Header"]
+        output_col = row.get("Output Header")
+        source_col = row.get("Source Header")
         if source_col in df.columns:
             df_out[output_col] = df[source_col]
         else:
-            df_out[output_col] = ""  # blank if missing column
+            df_out[output_col] = ""  # blank if column missing
 
+    # Convert and format date columns to DD-MMM-YYYY
+    for col in df_out.columns:
+        # Try to parse strings that look like dates
+        df_out[col] = pd.to_datetime(df_out[col], errors="ignore")
+        if pd.api.types.is_datetime64_any_dtype(df_out[col]):
+            df_out[col] = df_out[col].dt.strftime("%d-%b-%Y")
+
+    # Save final output
     out_file = f"{format}_output.xlsx"
     df_out.to_excel(out_file, index=False)
 
