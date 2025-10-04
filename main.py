@@ -13,6 +13,7 @@ os.makedirs(MAPPING_FOLDER, exist_ok=True)  # Ensure folder exists
 mapping_files = os.listdir(MAPPING_FOLDER)
 formats = [f.split(".")[0] for f in mapping_files] if mapping_files else []
 
+
 @app.get("/")
 def upload_form():
     options = "".join([f'<option value="{f}">{f}</option>' for f in formats])
@@ -49,6 +50,7 @@ def upload_form():
     </html>
     """)
 
+
 @app.post("/convert")
 async def convert(file: UploadFile, format: str = Form(...)):
     mapping_path = os.path.join(MAPPING_FOLDER, f"{format}.xlsx")
@@ -59,7 +61,7 @@ async def convert(file: UploadFile, format: str = Form(...)):
 
     # Load mapping and uploaded file
     mapping_df = pd.read_excel(mapping_path)
-    df = pd.read_excel(file.file)
+    df = pd.read_excel(file.file, dtype=str)  # Force everything as text
 
     # Create output DataFrame based on mapping
     df_out = pd.DataFrame()
@@ -71,12 +73,13 @@ async def convert(file: UploadFile, format: str = Form(...)):
         else:
             df_out[output_col] = ""  # blank if column missing
 
-    # Convert and format date columns to DD-MMM-YYYY
+    # Convert only valid date-like columns to DD-MMM-YYYY
     for col in df_out.columns:
-        # Try to parse strings that look like dates
-        df_out[col] = pd.to_datetime(df_out[col], errors="ignore")
-        if pd.api.types.is_datetime64_any_dtype(df_out[col]):
-            df_out[col] = df_out[col].dt.strftime("%d-%b-%Y")
+        temp = pd.to_datetime(df_out[col], errors="coerce")
+        if temp.notna().any():  # if at least one valid date
+            df_out[col] = temp.dt.strftime("%d-%b-%Y")
+        else:
+            df_out[col] = df_out[col].astype(str)  # keep as text
 
     # Save final output
     out_file = f"{format}_output.xlsx"
